@@ -6,7 +6,7 @@ This is a temporary script file.
 """
 
 from IPython import display
-
+import tqdm
 import glob
 import imageio
 import matplotlib.pyplot as plt
@@ -16,16 +16,16 @@ import tensorflow as tf
 import tensorflow_probability as tfp
 import time
 
-(train_images, _), (test_images, _) = tf.keras.datasets.mnist.load_data()
+(train_images, _), (test_images, _) = tf.keras.datasets.cifar10.load_data()
 
 def preprocess_images(images):
-  images = images.reshape((images.shape[0], 28, 28, 1)) / 255.
+  images = images.reshape((images.shape[0], 32, 32, 3)) / 255.
   return np.where(images > .5, 1.0, 0.0).astype('float32')
 
 train_images = preprocess_images(train_images)
 test_images = preprocess_images(test_images)
 
-train_size = 60000
+train_size = 50000
 batch_size = 32
 test_size = 10000
 
@@ -42,7 +42,7 @@ class CVAE(tf.keras.Model):
     self.latent_dim = latent_dim
     self.encoder = tf.keras.Sequential(
         [
-            tf.keras.layers.InputLayer(input_shape=(28, 28, 1)),
+            tf.keras.layers.InputLayer(input_shape=(32, 32, 3)),
             tf.keras.layers.Conv2D(
                 filters=32, kernel_size=3, strides=(2, 2), activation='relu'),
             tf.keras.layers.Conv2D(
@@ -56,8 +56,8 @@ class CVAE(tf.keras.Model):
     self.decoder = tf.keras.Sequential(
         [
             tf.keras.layers.InputLayer(input_shape=(latent_dim,)),
-            tf.keras.layers.Dense(units=7*7*32, activation=tf.nn.relu),
-            tf.keras.layers.Reshape(target_shape=(7, 7, 32)),
+            tf.keras.layers.Dense(units=8*8*32, activation=tf.nn.relu),
+            tf.keras.layers.Reshape(target_shape=(8, 8, 32)),
             tf.keras.layers.Conv2DTranspose(
                 filters=64, kernel_size=3, strides=2, padding='same',
                 activation='relu'),
@@ -66,7 +66,7 @@ class CVAE(tf.keras.Model):
                 activation='relu'),
             # No activation
             tf.keras.layers.Conv2DTranspose(
-                filters=1, kernel_size=3, strides=1, padding='same'),
+                filters=3, kernel_size=3, strides=1, padding='same'),
         ]
     )
 
@@ -109,7 +109,7 @@ def compute_loss(model, x):
   logpx_z = -tf.reduce_sum(cross_ent, axis=[1, 2, 3])
   logpz = log_normal_pdf(z, 0., 0.)
   logqz_x = log_normal_pdf(z, mean, logvar)
-  return -tf.reduce_mean(logpx_z + logpz - logqz_x)
+  return -tf.reduce_mean(logpx_z + logpz - logqz_x),tf.reduce_mean(logqz_x)
 
 
 @tf.function
@@ -120,12 +120,16 @@ def train_step(model, x, optimizer):
   update the model's parameters.
   """
   with tf.GradientTape() as tape:
-    loss = compute_loss(model, x)
+    loss,kl = compute_loss(model, x)
   gradients = tape.gradient(loss, model.trainable_variables)
   optimizer.apply_gradients(zip(gradients, model.trainable_variables))
+  return {
+        "loss": loss,
+        "kl_loss": kl,
+    }
   
   
-epochs = 1
+epochs = 2
 # set the dimensionality of the latent space to a plane for visualization later
 latent_dim = 2
 num_examples_to_generate = 16
@@ -140,14 +144,25 @@ model.compile(loss=loss, optimizer=optimizer, metrics=['accuracy'])
 
 for epoch in range(1, epochs + 1):
   start_time = time.time()
-  for train_x in train_dataset:
-    train_step(model, train_x, optimizer)
-  end_time = time.time()
-
-  loss = tf.keras.metrics.Mean()
-  for test_x in test_dataset:
-    loss(compute_loss(model, test_x))
-  elbo = -loss.result()
-  display.clear_output(wait=False)
-  print('Epoch: {}, Test set ELBO: {}, time elapse for current epoch: {}'
-        .format(epoch, elbo, end_time - start_time))
+  train_steps = train_size//batch_size
+  with tqdm.tqdm(total=train_steps) as t:
+      for train_x in train_dataset:
+        loss_value=train_step(model, train_x, optimizer)
+        end_time = time.time()
+        t.set_description(
+                            'epoch {:03d}  Loss: {:.3f} kl {:.3f} '.format(
+                                epoch, loss_value["loss"],
+                                loss_value["kl_loss"]))
+        t.update(1)
+#      print("Seen so far: %d samples" % ((step + 1) * batch_size))
+#
+#    # Display metrics at the end of each epoch.
+#    train_acc = train_acc_metric.result()
+#    print("Training acc over epoch: %.4f" % (float(train_acc),))
+      loss = tf.keras.metrics.Mean()
+      for test_x in test_dataset:
+        loss(compute_loss(model, test_x))
+      elbo = -loss.result()
+      display.clear_output(wait=False)
+      print('Epoch: {}, Test set ELBO: {}, time elapse for current epoch: {}'
+            .format(epoch, elbo, end_time - start_time))
