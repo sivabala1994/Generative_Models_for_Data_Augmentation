@@ -3,8 +3,8 @@ FROM python:3.7
 FROM nvidia/cuda:10.1-base-ubuntu18.04
 FROM tensorflow/tensorflow:2.0.1
 
-LABEL maintainer "Runzhi Yin <runzhi.yin@partner.samsung.com>"
-LABEL Description "LUX Wakeup model training TesorFlow docker."
+LABEL maintainer "siva balasubramanian <sivabala94@gmail.com>"
+LABEL Description "VAE TesorFlow docker."
 
 RUN apt-get update && apt-get install -y \
     python3-pip \
