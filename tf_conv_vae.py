@@ -18,9 +18,11 @@ import time
 
 (train_images, _), (test_images, _) = tf.keras.datasets.cifar10.load_data()
 
+
 def preprocess_images(images):
   images = images.reshape((images.shape[0], 32, 32, 3)) / 255.
-  return np.where(images > .5, 1.0, 0.0).astype('float32')
+  return images.astype('float32')
+  # return np.where(images > .5, 1.0, 0.0).astype('float32')
 
 train_images = preprocess_images(train_images)
 test_images = preprocess_images(test_images)
@@ -44,9 +46,13 @@ class CVAE(tf.keras.Model):
         [
             tf.keras.layers.InputLayer(input_shape=(32, 32, 3)),
             tf.keras.layers.Conv2D(
-                filters=32, kernel_size=3, strides=(2, 2), activation='relu'),
+                filters=3, kernel_size=2, strides=(1,1), activation='relu'),
             tf.keras.layers.Conv2D(
-                filters=64, kernel_size=3, strides=(2, 2), activation='relu'),
+                filters=32, kernel_size=2, strides=(1, 1), activation='relu'),
+            tf.keras.layers.Conv2D(
+                filters=32, kernel_size=2, strides=(1, 1), activation='relu'),
+            tf.keras.layers.Conv2D(
+                filters=32, kernel_size=2, strides=(1, 1), activation='relu'),
             tf.keras.layers.Flatten(),
             # No activation
             tf.keras.layers.Dense(latent_dim + latent_dim),
@@ -57,16 +63,20 @@ class CVAE(tf.keras.Model):
         [
             tf.keras.layers.InputLayer(input_shape=(latent_dim,)),
             tf.keras.layers.Dense(units=8*8*32, activation=tf.nn.relu),
-            tf.keras.layers.Reshape(target_shape=(8, 8, 32)),
+            tf.keras.layers.Dense(units=16*16*32, activation=tf.nn.relu),
+            tf.keras.layers.Reshape(target_shape=(16, 16, 32)),
             tf.keras.layers.Conv2DTranspose(
-                filters=64, kernel_size=3, strides=2, padding='same',
+                filters=32, kernel_size=2, strides=1, padding='same',
                 activation='relu'),
             tf.keras.layers.Conv2DTranspose(
-                filters=32, kernel_size=3, strides=2, padding='same',
+                filters=32, kernel_size=2, strides=1, padding='same',
+                activation='relu'),
+            tf.keras.layers.Conv2DTranspose(
+                filters=32, kernel_size=3, strides=1, padding='same',
                 activation='relu'),
             # No activation
             tf.keras.layers.Conv2DTranspose(
-                filters=3, kernel_size=3, strides=1, padding='same'),
+                filters=3, kernel_size=3, strides=2, padding='same'),
         ]
     )
 
@@ -127,12 +137,27 @@ def train_step(model, x, optimizer):
         "loss": loss,
         "kl_loss": kl,
     }
+
+
+def generate_and_save_images(model, epoch, test_sample):
+  mean, logvar = model.encode(test_sample)
+  z = model.reparameterize(mean, logvar)
+  predictions = model.sample(z)
+  fig = plt.figure(figsize=(3, 3))
+
+  for i in range(predictions.shape[0]):
+    plt.subplot(3, 3, i + 1)
+    plt.imshow(predictions[i, :, :, :],interpolation='nearest')
+    plt.axis('off')
+
+  # tight_layout minimizes the overlap between 2 sub-plots
+  plt.savefig('image_at_epoch_{:04d}.png'.format(epoch))
+  plt.show()
   
-  
-epochs = 2
+epochs = 1
 # set the dimensionality of the latent space to a plane for visualization later
-latent_dim = 2
-num_examples_to_generate = 16
+latent_dim = 16
+num_examples_to_generate = 9
 
 # keeping the random vector constant for generation (prediction) so
 # it will be easier to see the improvement.
@@ -141,6 +166,13 @@ random_vector_for_generation = tf.random.normal(
 model = CVAE(latent_dim)
 loss = tf.keras.metrics.Mean()
 model.compile(loss=loss, optimizer=optimizer, metrics=['accuracy'])
+
+
+assert batch_size >= num_examples_to_generate
+for test_batch in test_dataset.take(1):
+  test_sample = test_batch[0:num_examples_to_generate, :, :, :]
+  
+generate_and_save_images(model, 0, test_sample)
 
 for epoch in range(1, epochs + 1):
   start_time = time.time()
@@ -154,11 +186,7 @@ for epoch in range(1, epochs + 1):
                                 epoch, loss_value["loss"],
                                 loss_value["kl_loss"]))
         t.update(1)
-#      print("Seen so far: %d samples" % ((step + 1) * batch_size))
-#
-#    # Display metrics at the end of each epoch.
-#    train_acc = train_acc_metric.result()
-#    print("Training acc over epoch: %.4f" % (float(train_acc),))
+
       loss = tf.keras.metrics.Mean()
       for test_x in test_dataset:
         loss(compute_loss(model, test_x))
@@ -166,3 +194,10 @@ for epoch in range(1, epochs + 1):
       display.clear_output(wait=False)
       print('Epoch: {}, Test set ELBO: {}, time elapse for current epoch: {}'
             .format(epoch, elbo, end_time - start_time))
+      generate_and_save_images(model, epoch, test_sample)
+      
+          
+          
+#save encoder and decoder separately         
+model.encoder.save("models/enc_"+str(epochs)+".hdf5") 
+model.decoder.save("models/dec_"+str(epochs)+".hdf5")
