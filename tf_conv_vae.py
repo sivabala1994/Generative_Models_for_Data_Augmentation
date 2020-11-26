@@ -15,7 +15,7 @@ import PIL
 import tensorflow as tf
 import tensorflow_probability as tfp
 import time
-
+from model import CVAE
 (train_images, _), (test_images, _) = tf.keras.datasets.cifar10.load_data()
 
 
@@ -35,71 +35,6 @@ train_dataset = (tf.data.Dataset.from_tensor_slices(train_images)
                  .shuffle(train_size).batch(batch_size))
 test_dataset = (tf.data.Dataset.from_tensor_slices(test_images)
                 .shuffle(test_size).batch(batch_size))
-
-class CVAE(tf.keras.Model):
-  """Convolutional variational autoencoder."""
-
-  def __init__(self, latent_dim):
-    super(CVAE, self).__init__()
-    self.latent_dim = latent_dim
-    self.encoder = tf.keras.Sequential(
-        [
-            tf.keras.layers.InputLayer(input_shape=(32, 32, 3)),
-            tf.keras.layers.Conv2D(
-                filters=3, kernel_size=2, strides=(1,1), activation='relu'),
-            tf.keras.layers.Conv2D(
-                filters=32, kernel_size=2, strides=(1, 1), activation='relu'),
-            tf.keras.layers.Conv2D(
-                filters=32, kernel_size=2, strides=(1, 1), activation='relu'),
-            tf.keras.layers.Conv2D(
-                filters=32, kernel_size=2, strides=(1, 1), activation='relu'),
-            tf.keras.layers.Flatten(),
-            # No activation
-            tf.keras.layers.Dense(latent_dim + latent_dim),
-        ]
-    )
-
-    self.decoder = tf.keras.Sequential(
-        [
-            tf.keras.layers.InputLayer(input_shape=(latent_dim,)),
-            tf.keras.layers.Dense(units=8*8*32, activation=tf.nn.relu),
-            tf.keras.layers.Dense(units=16*16*32, activation=tf.nn.relu),
-            tf.keras.layers.Reshape(target_shape=(16, 16, 32)),
-            tf.keras.layers.Conv2DTranspose(
-                filters=32, kernel_size=2, strides=1, padding='same',
-                activation='relu'),
-            tf.keras.layers.Conv2DTranspose(
-                filters=32, kernel_size=2, strides=1, padding='same',
-                activation='relu'),
-            tf.keras.layers.Conv2DTranspose(
-                filters=32, kernel_size=3, strides=1, padding='same',
-                activation='relu'),
-            # No activation
-            tf.keras.layers.Conv2DTranspose(
-                filters=3, kernel_size=3, strides=2, padding='same'),
-        ]
-    )
-
-  @tf.function
-  def sample(self, eps=None):
-    if eps is None:
-      eps = tf.random.normal(shape=(100, self.latent_dim))
-    return self.decode(eps, apply_sigmoid=True)
-
-  def encode(self, x):
-    mean, logvar = tf.split(self.encoder(x), num_or_size_splits=2, axis=1)
-    return mean, logvar
-
-  def reparameterize(self, mean, logvar):
-    eps = tf.random.normal(shape=mean.shape)
-    return eps * tf.exp(logvar * .5) + mean
-
-  def decode(self, z, apply_sigmoid=False):
-    logits = self.decoder(z)
-    if apply_sigmoid:
-      probs = tf.sigmoid(logits)
-      return probs
-    return logits
 
 optimizer = tf.keras.optimizers.Adam(1e-4)
 
@@ -151,10 +86,10 @@ def generate_and_save_images(model, epoch, test_sample):
     plt.axis('off')
 
   # tight_layout minimizes the overlap between 2 sub-plots
-  plt.savefig('image_at_epoch_{:04d}.png'.format(epoch))
+  # plt.savefig('image_at_epoch_{:04d}.png'.format(epoch))
   plt.show()
   
-epochs = 1
+epochs = 50
 # set the dimensionality of the latent space to a plane for visualization later
 latent_dim = 16
 num_examples_to_generate = 9
@@ -171,7 +106,12 @@ model.compile(loss=loss, optimizer=optimizer, metrics=['accuracy'])
 assert batch_size >= num_examples_to_generate
 for test_batch in test_dataset.take(1):
   test_sample = test_batch[0:num_examples_to_generate, :, :, :]
-  
+
+for i in range(num_examples_to_generate):
+    plt.subplot(3, 3, i + 1)
+    plt.imshow(test_sample[i, :, :, :],interpolation='nearest')
+    plt.axis('off')
+
 generate_and_save_images(model, 0, test_sample)
 
 for epoch in range(1, epochs + 1):
@@ -199,5 +139,5 @@ for epoch in range(1, epochs + 1):
           
           
 #save encoder and decoder separately         
-model.encoder.save("models/enc_"+str(epochs)+".hdf5") 
-model.decoder.save("models/dec_"+str(epochs)+".hdf5")
+model.encoder.save("models/enc_v2_"+str(epochs)+".hdf5") 
+model.decoder.save("models/dec_v2_"+str(epochs)+".hdf5")
