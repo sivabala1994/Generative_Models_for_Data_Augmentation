@@ -14,22 +14,37 @@ import numpy as np
 import PIL
 import tensorflow as tf
 import tensorflow_probability as tfp
+import tensorflow_addons as tfa
 import time
 from model import CVAE
-(train_images, _), (test_images, _) = tf.keras.datasets.cifar10.load_data()
+(train_images, train_labels), (test_images, _) = tf.keras.datasets.cifar10.load_data()
 
-
+def separate_data(train_images,train_labels,label):
+    if label==-1:
+        return train_images
+    else:
+        train_list=[]
+        for item in range(50000):
+            if int(train_labels[item]) ==label:
+                train_list.append(train_images[item])
+        return np.asarray(train_list)
+       
+            
+        
 def preprocess_images(images):
   images = images.reshape((images.shape[0], 32, 32, 3)) / 255.
   return images.astype('float32')
   # return np.where(images > .5, 1.0, 0.0).astype('float32')
 
-train_images = preprocess_images(train_images)
-test_images = preprocess_images(test_images)
+train_images=separate_data(train_images,train_labels,-1)
 
-train_size = 50000
+train_images = preprocess_images(train_images)
+# test_images = preprocess_images(test_images)
+test_images=train_images
+
+train_size = train_images.shape[0]
 batch_size = 32
-test_size = 10000
+test_size = test_images.shape[0]
 
 train_dataset = (tf.data.Dataset.from_tensor_slices(train_images)
                  .shuffle(train_size).batch(batch_size))
@@ -107,9 +122,10 @@ assert batch_size >= num_examples_to_generate
 for test_batch in test_dataset.take(1):
   test_sample = test_batch[0:num_examples_to_generate, :, :, :]
 
+
 for i in range(num_examples_to_generate):
     plt.subplot(3, 3, i + 1)
-    plt.imshow(test_sample[i, :, :, :],interpolation='nearest')
+    plt.imshow(test_sample[i, :, :, :])
     plt.axis('off')
 
 generate_and_save_images(model, 0, test_sample)
