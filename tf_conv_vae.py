@@ -37,6 +37,7 @@ def preprocess_images(images):
   # return np.where(images > .5, 1.0, 0.0).astype('float32')
 
 train_images=separate_data(train_images,train_labels,-1)
+# train_images=np.asarray(train_list)
 
 train_images = preprocess_images(train_images)
 # test_images = preprocess_images(test_images)
@@ -61,15 +62,15 @@ def log_normal_pdf(sample, mean, logvar, raxis=1):
       axis=raxis)
 
 
-def compute_loss(model, x):
+def compute_loss(model, x,beta=0.5):
   mean, logvar = model.encode(x)
   z = model.reparameterize(mean, logvar)
   x_logit = model.decode(z)
   cross_ent = tf.nn.sigmoid_cross_entropy_with_logits(logits=x_logit, labels=x)
   logpx_z = -tf.reduce_sum(cross_ent, axis=[1, 2, 3])
-  logpz = log_normal_pdf(z, 0., 0.)
-  logqz_x = log_normal_pdf(z, mean, logvar)
-  return -tf.reduce_mean(logpx_z + logpz - logqz_x),tf.reduce_mean(logqz_x)
+  logpz = beta * log_normal_pdf(z, 0., 1.)
+  logqz_x = beta * log_normal_pdf(z, mean, logvar)
+  return -tf.reduce_mean(logpx_z + logpz - logqz_x),tf.reduce_mean(logpz - logqz_x)
 
 
 @tf.function
@@ -80,7 +81,7 @@ def train_step(model, x, optimizer):
   update the model's parameters.
   """
   with tf.GradientTape() as tape:
-    loss,kl = compute_loss(model, x)
+    loss,kl = compute_loss(model, x,beta=0.5)
   gradients = tape.gradient(loss, model.trainable_variables)
   optimizer.apply_gradients(zip(gradients, model.trainable_variables))
   return {
