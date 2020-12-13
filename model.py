@@ -27,13 +27,17 @@ class CVAE(tf.keras.Model):
         [
             tf.keras.layers.InputLayer(input_shape=(32, 32, 3)),
             tf.keras.layers.Conv2D(
-                filters=3, kernel_size=2, strides=(1,1), activation='relu'),
+                filters=3, kernel_size=3, strides=(1,1), activation='relu'),
+            # tf.keras.layers.BatchNormalization(),
             tf.keras.layers.Conv2D(
-                filters=64, kernel_size=2, strides=(1, 1), activation='relu'),
+                filters=64, kernel_size=3, strides=(1, 1), activation='relu'),
+            # tf.keras.layers.BatchNormalization(),
             tf.keras.layers.Conv2D(
-                filters=64, kernel_size=2, strides=(1, 1), activation='relu'),
+                filters=64, kernel_size=3, strides=(1, 1), activation='relu'),
+            # tf.keras.layers.BatchNormalization(),
             tf.keras.layers.Conv2D(
-                filters=32, kernel_size=2, strides=(1, 1), activation='relu'),
+                filters=32, kernel_size=3, strides=(1, 1), activation='relu'),
+            # tf.keras.layers.BatchNormalization(),
             tf.keras.layers.Flatten(),
             # No activation
             tf.keras.layers.Dense(latent_dim + latent_dim),
@@ -47,14 +51,17 @@ class CVAE(tf.keras.Model):
             tf.keras.layers.Dense(units=16*16*32, activation=tf.nn.relu),
             tf.keras.layers.Reshape(target_shape=(16, 16, 32)),
             tf.keras.layers.Conv2DTranspose(
-                filters=32, kernel_size=2, strides=1, padding='same',
+                filters=32, kernel_size=3, strides=1, padding='same',
                 activation='relu'),
+            # tf.keras.layers.BatchNormalization(),
             tf.keras.layers.Conv2DTranspose(
-                filters=64, kernel_size=2, strides=1, padding='same',
+                filters=64, kernel_size=3, strides=1, padding='same',
                 activation='relu'),
+            # tf.keras.layers.BatchNormalization(),
             tf.keras.layers.Conv2DTranspose(
                 filters=64, kernel_size=3, strides=2, padding='same',
                 activation='relu'),
+           
             # No activation
             tf.keras.layers.Conv2DTranspose(
                 filters=3, kernel_size=3, strides=1, padding='same'),
@@ -65,7 +72,7 @@ class CVAE(tf.keras.Model):
   def sample(self, eps=None):
     if eps is None:
       eps = tf.random.normal(shape=(100, self.latent_dim))
-    return self.decode(eps, apply_sigmoid=True)
+    return self.decode(eps, apply_sigmoid=False)
 
   def encode(self, x):
     mean, logvar = tf.split(self.encoder(x), num_or_size_splits=2, axis=1)

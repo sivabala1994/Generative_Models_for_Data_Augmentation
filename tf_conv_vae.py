@@ -40,8 +40,8 @@ train_images=separate_data(train_images,train_labels,-1)
 # train_images=np.asarray(train_list)
 
 train_images = preprocess_images(train_images)
-# test_images = preprocess_images(test_images)
-test_images=train_images
+test_images = preprocess_images(test_images)
+# test_images=train_images
 
 train_size = train_images.shape[0]
 batch_size = 32
@@ -53,6 +53,7 @@ test_dataset = (tf.data.Dataset.from_tensor_slices(test_images)
                 .shuffle(test_size).batch(batch_size))
 
 optimizer = tf.keras.optimizers.Adam(1e-4)
+# optimizer=tf.keras.optimizers.SGD(learning_rate=0.001)
 
 
 def log_normal_pdf(sample, mean, logvar, raxis=1):
@@ -62,15 +63,16 @@ def log_normal_pdf(sample, mean, logvar, raxis=1):
       axis=raxis)
 
 
-def compute_loss(model, x,beta=0.5):
+def compute_loss(model, x,beta=1):
   mean, logvar = model.encode(x)
   z = model.reparameterize(mean, logvar)
   x_logit = model.decode(z)
-  cross_ent = tf.nn.sigmoid_cross_entropy_with_logits(logits=x_logit, labels=x)
-  logpx_z = -tf.reduce_sum(cross_ent, axis=[1, 2, 3])
+  # cross_ent = tf.nn.sigmoid_cross_entropy_with_logits(logits=x_logit, labels=x)
+  # logpx_z = -tf.reduce_sum(cross_ent, axis=[1, 2, 3])
+  reconstruction_loss = -tf.reduce_sum(tf.keras.losses.MSE(x_logit,x), axis=(1,2)) 
   logpz = beta * log_normal_pdf(z, 0., 1.)
-  logqz_x = beta * log_normal_pdf(z, mean, logvar)
-  return -tf.reduce_mean(logpx_z + logpz - logqz_x),tf.reduce_mean(logpz - logqz_x)
+  logqz_x =beta * log_normal_pdf(z, mean, logvar)
+  return -tf.reduce_mean(reconstruction_loss + logpz - logqz_x),tf.reduce_mean(logqz_x)
 
 
 @tf.function
@@ -81,7 +83,7 @@ def train_step(model, x, optimizer):
   update the model's parameters.
   """
   with tf.GradientTape() as tape:
-    loss,kl = compute_loss(model, x,beta=0.5)
+    loss,kl = compute_loss(model, x,0.05)
   gradients = tape.gradient(loss, model.trainable_variables)
   optimizer.apply_gradients(zip(gradients, model.trainable_variables))
   return {
