@@ -15,13 +15,13 @@ from tensorflow.keras import layers
 import time
 import tensorflow as tf
 from IPython import display
-
+import tqdm
 
 (train_images, train_labels), (_, _) = tf.keras.datasets.mnist.load_data()
 
 train_images = train_images.reshape(train_images.shape[0], 28, 28, 1).astype('float32')
 train_images = (train_images - 127.5) / 127.5 # Normalize the images to [-1, 1]
-
+train_size = train_images.shape[0]
 BUFFER_SIZE = 60000
 BATCH_SIZE = 256
 
@@ -122,23 +122,33 @@ def train_step(images):
 
     generator_optimizer.apply_gradients(zip(gradients_of_generator, generator.trainable_variables))
     discriminator_optimizer.apply_gradients(zip(gradients_of_discriminator, discriminator.trainable_variables))
-
+    return {
+        "gen_loss": gen_loss,
+        "disc_loss": disc_loss,
+    }
 
 def train(dataset, epochs):
   for epoch in range(epochs):
     start = time.time()
-
-    for image_batch in dataset:
-      train_step(image_batch)
-
-    # Produce images for the GIF as we go
+    train_steps = train_size//BATCH_SIZE
+    with tqdm.tqdm(total=train_steps) as t:
+        for image_batch in dataset:
+          loss_value=train_step(image_batch)
+          t.set_description(
+                              'epoch {:03d}  gen: {:.3f} disc {:.3f} '.format(
+                                  epoch, loss_value["gen_loss"],
+                                  loss_value["disc_loss"]))
+          t.update(1)
+              
+    
+        # Produce images for the GIF as we go
     display.clear_output(wait=True)
     generate_and_save_images(generator,
-                             epoch + 1,
-                             seed)
-
+                              epoch + 1,
+                              seed)
     
-
+        
+    
     print ('Time for epoch {} is {} sec'.format(epoch + 1, time.time()-start))
 
   # Generate after the final epoch
