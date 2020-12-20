@@ -1,5 +1,5 @@
 
-# Generative models for data augmentation (Under construction)
+# Generative Models for Data Augmentation (Under construction)
 
 Repo for testing out various generative models like VAE, GANs etc.
 
